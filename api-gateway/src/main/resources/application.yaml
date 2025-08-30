@@ -28,6 +28,12 @@ spring:
                 - Path=/api/foodapp/**
               filters:
                 - RewritePath=/api/foodapp/(?<segment>.*), /api/${segment}
+            - id: tradeapp
+              uri: http://localhost:8000
+              predicates:
+                - Path=/api/tradeapp/**
+              filters:
+                - RewritePath=/api/tradeapp/(?<segment>.*), /api/${segment}
 
 logging:
   level:

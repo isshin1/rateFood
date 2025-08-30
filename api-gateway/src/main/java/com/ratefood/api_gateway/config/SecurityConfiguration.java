@@ -2,6 +2,7 @@ package com.ratefood.api_gateway.config;
 
 import com.ratefood.api_gateway.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,7 +34,6 @@ public class SecurityConfiguration {
     @Value("${cors.allowed-origins}")
     private String[] allowedOrigins;
 
-
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
@@ -42,7 +42,8 @@ public class SecurityConfiguration {
                 .authorizeExchange(authorizeExchangeSpec -> authorizeExchangeSpec
                         .pathMatchers(HttpMethod.OPTIONS).permitAll()
                         .pathMatchers("/api/auth/**").permitAll()
-                        .pathMatchers(HttpMethod.GET, "/api/foodapp/**").permitAll()
+                        .pathMatchers( "/api/foodapp/**").permitAll()
+                        .pathMatchers( "/api/tradeapp/**").permitAll()
                         .anyExchange().authenticated())
                 .addFilterAt(jwtAuthenticationFilter, SecurityWebFiltersOrder.AUTHENTICATION)
                 .exceptionHandling(exceptionHandlingSpec -> exceptionHandlingSpec
