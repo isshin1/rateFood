@@ -23,13 +23,13 @@ spring:
         webflux:
           routes:
             - id: foodapp
-              uri: http://${BACKEND:localhost}:8081
+              uri: http://${FOODAPP_BACKEND:localhost}:8081
               predicates:
                 - Path=/api/foodapp/**
               filters:
                 - RewritePath=/api/foodapp/(?<segment>.*), /api/${segment}
             - id: tradeapp
-              uri: http://localhost:8000
+              uri: http://${TRADEAPP_BACKEND:localhost}:8000
               predicates:
                 - Path=/api/tradeapp/**
               filters:
@@ -42,7 +42,7 @@ logging:
 
 token:
   signing:
-    key: ${SIGN_KEY:mySecretSigningKey123456789012345678901234567890}
+    key: ${SIGN_KEY:mySecretSigningKey195456756012345346218234567890}
 
 cors:
-  allowedOrigins : http://localhost:3000,http://${SERVER_IP}:3000
+  allowed-origins: http://localhost:*, https://*.kushy.dev, http://*.kushy.dev
