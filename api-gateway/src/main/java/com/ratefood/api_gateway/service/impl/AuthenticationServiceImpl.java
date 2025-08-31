@@ -27,15 +27,27 @@ public class AuthenticationServiceImpl implements AuthenticationService {
     @Override
     public Mono<JwtAuthenticationResponse> signup(SignUpRequest request) {
         return Mono.fromCallable(() -> {
-            var user = User.builder().firstName(request.getFirstName()).lastName(request.getLastName())
-                    .email(request.getEmail()).password(passwordEncoder.encode(request.getPassword()))
-                    .role(Role.USER).build();
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new RuntimeException("Email already exists");
+            }
+            var user = User.builder()
+                    .firstName(request.getFirstName())
+                    .lastName(request.getLastName())
+                    .email(request.getEmail())
+                    .password(passwordEncoder.encode(request.getPassword()))
+                    .role(Role.USER)
+                    .build();
             userRepository.save(user);
             var jwt = jwtService.generateToken(user);
-            return JwtAuthenticationResponse.builder().token(jwt).build();
+            var roles = user.getAuthorities().stream()
+                    .map(auth -> auth.getAuthority())
+                    .toList();
+            return JwtAuthenticationResponse.builder()
+                    .token(jwt)
+                    .roles(roles)
+                    .build();
         }).subscribeOn(Schedulers.boundedElastic());
     }
-
     @Override
     public Mono<JwtAuthenticationResponse> signin(SignInRequest request) {
         return authenticationManager
@@ -46,7 +58,10 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     var roles = user.getAuthorities().stream()
                             .map(auth -> auth.getAuthority())
                             .toList();
-                    return JwtAuthenticationResponse.builder().token(jwt).roles(roles) .build();
+                    return JwtAuthenticationResponse.builder()
+                            .token(jwt)
+                            .roles(roles)
+                            .build();
                 });
     }
 }
