@@ -20,21 +20,16 @@ import reactor.core.publisher.Mono;
 public class AuthController {
     private final AuthenticationService authenticationService;
 
+    @PostMapping("/signin")
+    public Mono<ResponseEntity<JwtAuthenticationResponse>> signin(@RequestBody SignInRequest request) {
+        return authenticationService.signin(request)
+                .map(ResponseEntity::ok);
+    }
+
     @PostMapping("/signup")
     public Mono<ResponseEntity<JwtAuthenticationResponse>> signup(@RequestBody SignUpRequest request) {
         return authenticationService.signup(request)
-                .map(ResponseEntity::ok)
-                .onErrorReturn(RuntimeException.class,
-                        ResponseEntity.status(HttpStatus.CONFLICT).build());
-    }
-
-    @PostMapping("/signin")
-    public Mono<ResponseEntity<JwtAuthenticationResponse>> signin(@RequestBody SignInRequest request) {
-        return authenticationService.signin(request).map(response -> ResponseEntity.ok(response))
-                .onErrorReturn(BadCredentialsException.class,
-                        ResponseEntity.status(HttpStatus.UNAUTHORIZED).build())
-                .onErrorReturn(Exception.class,
-                        ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+                .map(ResponseEntity::ok);
     }
 
     @PostMapping("/logout")

@@ -11,6 +11,9 @@ import com.ratefood.api_gateway.service.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -48,6 +51,7 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                     .build();
         }).subscribeOn(Schedulers.boundedElastic());
     }
+
     @Override
     public Mono<JwtAuthenticationResponse> signin(SignInRequest request) {
         return authenticationManager
@@ -62,6 +66,12 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                             .token(jwt)
                             .roles(roles)
                             .build();
-                });
+                })
+                .onErrorMap(BadCredentialsException.class, ex ->
+                        new RuntimeException("Invalid email or password"))
+                .onErrorMap(DisabledException.class, ex ->
+                        new RuntimeException("Account is disabled"))
+                .onErrorMap(LockedException.class, ex ->
+                        new RuntimeException("Account is locked"));
     }
 }
