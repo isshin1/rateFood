@@ -66,12 +66,6 @@ public class AuthenticationServiceImpl implements AuthenticationService {
                             .token(jwt)
                             .roles(roles)
                             .build();
-                })
-                .onErrorMap(BadCredentialsException.class, ex ->
-                        new RuntimeException("Invalid email or password"))
-                .onErrorMap(DisabledException.class, ex ->
-                        new RuntimeException("Account is disabled"))
-                .onErrorMap(LockedException.class, ex ->
-                        new RuntimeException("Account is locked"));
+                });
     }
 }
