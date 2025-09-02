@@ -60,23 +60,53 @@ export function AuthDialog({ open, onOpenChange }: { open: boolean, onOpenChange
         body: JSON.stringify(values),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Something went wrong');
-      }
-
-      if (data.token && data.roles) {
-        // Pass both token and roles to the login function
-        login(data.token, data.roles);
-        toast.success('Sign in successful!');
-        onOpenChange(false);
-        window.location.href = "/";
+      if (response.ok) {
+        // Success case
+        const data = await response.json();
+        
+        if (data.token && data.roles) {
+          // Pass both token and roles to the login function
+          login(data.token, data.roles);
+          toast.success('Sign in successful!');
+          onOpenChange(false);
+          window.location.href = "/";
+        } else {
+          throw new Error('Token or roles not found in response');
+        }
       } else {
-        throw new Error('Token or roles not found in response');
+        // Error case - handle different status codes
+        let errorMessage = "Invalid email or password. Please try again.";
+        
+        try {
+          const text = await response.text();
+          if (text) {
+            try {
+              const errorData = JSON.parse(text);
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (e) {
+              // If not JSON, use the text as error message
+              errorMessage = text;
+            }
+          }
+        } catch (e) {
+          // If we can't read the response, use default message based on status
+          console.error('Could not read error response:', e);
+          if (response.status === 401) {
+            errorMessage = "Invalid email or password";
+          } else if (response.status === 403) {
+            errorMessage = "Account is disabled";
+          } else if (response.status === 423) {
+            errorMessage = "Account is locked";
+          }
+        }
+
+        // Show error toast
+        toast.error(`Sign in failed: ${errorMessage}`);
       }
     } catch (error) {
+      // Network errors or other unexpected errors
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      
       toast.error(`Sign in failed: ${errorMessage}`);
       console.error('Sign in failed:', error);
     }
@@ -92,17 +122,45 @@ export function AuthDialog({ open, onOpenChange }: { open: boolean, onOpenChange
         body: JSON.stringify(values),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Something went wrong');
+      if (response.ok) {
+        // Success case
+        toast.success('Sign up successful! Please sign in.');
+        setActiveTab('signin');
+        signUpForm.reset();
+      } else {
+        // Error case - handle different status codes
+        let errorMessage = "Something went wrong. Please try again.";
+        
+        try {
+          const text = await response.text();
+          if (text) {
+            try {
+              const errorData = JSON.parse(text);
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (e) {
+              // If not JSON, use the text as error message
+              errorMessage = text;
+            }
+          }
+        } catch (e) {
+          // If we can't read the response, use default message based on status
+          console.error('Could not read error response:', e);
+          if (response.status === 409) {
+            errorMessage = "An account with this email already exists";
+          } else if (response.status === 400) {
+            errorMessage = "Invalid input data";
+          } else if (response.status === 422) {
+            errorMessage = "Validation failed";
+          }
+        }
+
+        // Show error toast
+        toast.error(`Sign up failed: ${errorMessage}`);
       }
-
-      toast.success('Sign up successful! Please sign in.');
-      setActiveTab('signin');
-      signUpForm.reset();
-
     } catch (error) {
+      // Network errors or other unexpected errors
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+      
       toast.error(`Sign up failed: ${errorMessage}`);
       console.error('Sign up failed:', error);
     }
