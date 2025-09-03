@@ -11,6 +11,7 @@ import { fetchWithAuth } from "@/lib/api";
 import { Plus } from "lucide-react";
 import { useAppContext } from "./contexts/AppContext";
 import { useSession, SessionContextType } from ".//contexts/SessionContext";
+import { OnboardingPopup } from "./components/OnboardingPopup";
 
 export default function App() {
   const {
@@ -49,13 +50,46 @@ export default function App() {
   const [restaurantRange, setRestaurantRange] = useState(10);
 
   const { session }: SessionContextType = useSession();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [previousSessionState, setPreviousSessionState] = useState<string | null>(null);
 
-
+  // Initialize app and handle onboarding
   useEffect(() => {
     setHasMounted(true);
-    const city = localStorage.getItem('selectedCity') || '';
-    setSelectedCity(city);
+    
+    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+    const savedCity = localStorage.getItem('selectedCity') || '';
+    
+    // Set the saved city
+    setSelectedCity(savedCity);
+    
+    // Show onboarding if user hasn't seen it OR no city is selected
+    // Changed the condition from AND to OR
+    if (!hasSeenOnboarding || !savedCity) {
+      setShowOnboarding(true);
+    }
+    
+    // Initialize previous session state
+    setPreviousSessionState(session?.token || null);
   }, [setSelectedCity]);
+
+  // Watch for logout events
+  useEffect(() => {
+    if (!hasMounted) return;
+    
+    // If we had a session before but don't now, it means user logged out
+    if (previousSessionState && !session?.token) {
+      // User logged out - show onboarding and clear city selection
+      setShowOnboarding(true);
+      setSelectedCity('');
+      localStorage.removeItem('selectedCity');
+      // Optionally clear the onboarding flag to force them through it again
+      localStorage.removeItem('hasSeenOnboarding');
+    }
+    
+    // Update the previous session state
+    setPreviousSessionState(session?.token || null);
+  }, [session?.token, previousSessionState, setSelectedCity, hasMounted]);
 
   // Reset restaurants when city changes
   useEffect(() => {
@@ -129,6 +163,27 @@ export default function App() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, [loadingRestaurants, hasMoreRestaurants, selectedTab, setRestaurantsCurrentPage]);
+
+  // Add these handlers
+  const handleOnboardingCitySelect = (city: string) => {
+    setSelectedCity(city);
+    localStorage.setItem('selectedCity', city);
+    localStorage.setItem('hasSeenOnboarding', 'true');
+    setShowOnboarding(false);
+  };
+
+  const handleOnboardingClose = () => {
+    // Only allow closing without city selection if there's already a saved city
+    const savedCity = localStorage.getItem('selectedCity') || '';
+    if (savedCity) {
+      localStorage.setItem('hasSeenOnboarding', 'true');
+      setShowOnboarding(false);
+    } else {
+      // If no city is saved, don't allow closing - user must select a city
+      // You could show an alert here or just prevent closing
+      console.log("Please select a city before continuing");
+    }
+  };
 
   const filteredDishes = useMemo(() => {
     return dishes.filter(dish => {
@@ -212,6 +267,11 @@ function AddRestaurantDialogFloatingTrigger({ onAddRestaurant }: { onAddRestaura
 
   return (
     <div className="min-h-screen bg-background-secondary">
+      <OnboardingPopup
+        isOpen={showOnboarding}
+        onClose={handleOnboardingClose}
+        onCitySelect={handleOnboardingCitySelect}
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-background-secondary">
         <Tabs value={selectedTab} className="w-full">
           <TabsContent value="dishes" className="space-y-6" hidden={selectedTab !== "dishes"}>

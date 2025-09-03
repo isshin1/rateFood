@@ -70,7 +70,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedTab, setSelectedTab] = useState('dishes');
-  
+
   // Common state for dishes and restaurants
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);

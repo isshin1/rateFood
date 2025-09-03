@@ -50,7 +50,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       const token = localStorage.getItem('jwt');
-      
+      console.log(token)
       if (token) {
         // Call backend to invalidate the token
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
@@ -66,16 +66,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         } else {
           const result = await response.json();
           console.log('Backend logout response:', result.message);
+
         }
       }
 
       // Always clean up local storage and session regardless of API call result
       localStorage.removeItem('jwt');
       localStorage.removeItem('userRoles');
+      localStorage.removeItem('selectedCity');
+
       setSession({ isLoggedIn: false, token: null, roles: null });
       
       toast.success('Log out successful!');
-      window.location.href = "/";
+      // window.location.href = "/";
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 30000);
       
     } catch (error) {
       // Even if the API call fails, we should still clear local storage
@@ -86,7 +92,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       console.error('Logout error:', error);
       
       toast.success('Log out successful!');
-      window.location.href = "/";
+      // window.location.href = "/";
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 30000);
     }
   };
 
