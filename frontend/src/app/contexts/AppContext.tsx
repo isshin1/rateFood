@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Dish } from "@/app/components/DishCard";
 import { Restaurant } from "@/app/components/RestaurantCard";
 import { fetchWithAuth } from "@/lib/api";
@@ -69,7 +69,18 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedCity, setSelectedCity] = useState('');
-  const [selectedTab, setSelectedTab] = useState('dishes');
+  const [selectedTab, setSelectedTabState] = useState('dishes');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('selectedTab');
+    if (saved === 'dishes' || saved === 'restaurants') setSelectedTabState(saved);
+  }, []);
+
+  const setSelectedTab = (tab: string) => {
+    setSelectedTabState(tab);
+    if (typeof window !== 'undefined') localStorage.setItem('selectedTab', tab);
+  };
 
   // Common state for dishes and restaurants
   const [dishes, setDishes] = useState<Dish[]>([]);
@@ -97,42 +108,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { session }: SessionContextType = useSession();
 
   const handleAddDish = async (newDish: Omit<Dish, "id" | "rating" | "favoriteCount">) => {
-    const dish: Dish = {
-      ...newDish,
-      id: Date.now().toString(),
-      // rating: 0,
-      favoriteCount: 0,
-    };
+    const restaurantId = (newDish as Dish).restaurantId;
+    if (!restaurantId) {
+      toast.error("Pick a restaurant from the dropdown first.");
+      return;
+    }
 
     try {
-      const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/foodapp/dish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newDish)
-      });
+      // auto_favorite=true: backend will favourite the dish AND its restaurant in one go
+      const response = await fetchWithAuth(
+        `${process.env.NEXT_PUBLIC_API_URL}/restaurants/${restaurantId}/dishes?auto_favorite=true`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newDish.name,
+            description: newDish.description || null,
+            tags: newDish.tags ?? [],
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Server error: ${response.statusText}`);
       }
 
-      const createdDish: Dish = await response.json();
-      
-      // Use the server response if available, otherwise use local dish
-      if (session.roles?.includes('ADMIN')) {
-        setDishes(prev => [createdDish || dish, ...prev]);
-        toast.success('New Dish Added', createdDish);
-      }
-      if (session.roles?.includes('USER')) {
-        // setDishes(prev => [createdDish || dish, ...prev]);
-        toast.success('Draft Dish Request added', createdDish);
+      const created = await response.json();
+
+      // If the user picked a photo, upload it as a follow-up multipart call.
+      const imageFile = (newDish as Dish).imageFile;
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append("file", imageFile);
+        const imgResp = await fetchWithAuth(
+          `${process.env.NEXT_PUBLIC_API_URL}/dishes/${created.id}/image`,
+          { method: 'POST', body: fd }
+        );
+        if (!imgResp.ok) {
+          toast.error("Dish added, but photo upload failed.");
+        }
       }
 
+      const mapped: Dish = {
+        id: created.id,
+        name: created.name,
+        restaurant: created.restaurant_name ?? newDish.restaurant,
+        restaurantId: created.restaurant_id,
+        description: created.description ?? "",
+        tags: created.tags ?? [],
+        image: `${process.env.NEXT_PUBLIC_API_URL}/dishes/${created.id}/image?w=400`,
+        isFavourite: created.is_favourite ?? true,
+        favoriteCount: created.favorite_count ?? 1,
+      };
+
+      setDishes(prev => [mapped, ...prev]);
+      await fetchFavourites();  // refresh the favourites strip
+      toast.success('Dish added and favourited');
     } catch (error) {
       console.error('Failed to add dish:', error);
-      // Still add to local state as fallback
-      setDishes(prev => [dish, ...prev]);
+      toast.error(`Failed to add dish: ${error}`);
     }
   };
 const handleAddRestaurant = async (newRestaurant: Omit<Restaurant, "id" | "rating" | "favoriteCount">) => {
@@ -184,17 +218,46 @@ const handleAddRestaurant = async (newRestaurant: Omit<Restaurant, "id" | "ratin
     setLoadingFavourites(true);
     try {
       // Fetch favourite dishes
-      const dishesResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/foodapp/dish/favourites/${selectedCity}`);
+      const dishesResponse = await fetchWithAuth(
+        `${process.env.NEXT_PUBLIC_API_URL}/favorites/dishes?city=${encodeURIComponent(selectedCity)}`
+      );
       if (dishesResponse.ok) {
-        const dishesData = await dishesResponse.json();
-        setFavouriteDishes(dishesData.data || []);
+        const rows: any[] = await dishesResponse.json();
+        setFavouriteDishes(
+          rows.map((d) => ({
+            id: d.id,
+            name: d.name,
+            restaurant: d.restaurant_name ?? "",
+            restaurantId: d.restaurant_id,
+            description: d.description ?? "",
+            tags: d.tags ?? [],
+            image: `${process.env.NEXT_PUBLIC_API_URL}/dishes/${d.id}/image?w=400`,
+            isFavourite: true,
+            favoriteCount: d.favorite_count ?? 0,
+          }))
+        );
       }
 
       // Fetch favourite restaurants
-      const restaurantsResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/foodapp/restaurant/favourites/${selectedCity}`);
+      const restaurantsResponse = await fetchWithAuth(
+        `${process.env.NEXT_PUBLIC_API_URL}/favorites/restaurants?city=${encodeURIComponent(selectedCity)}`
+      );
       if (restaurantsResponse.ok) {
-        const restaurantsData = await restaurantsResponse.json();
-        setFavouriteRestaurants(restaurantsData.data || []);
+        const rows: any[] = await restaurantsResponse.json();
+        setFavouriteRestaurants(
+          rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            cuisine: r.cuisine ?? "",
+            description: r.description ?? r.formatted_address ?? "",
+            tags: r.tags ?? [],
+            image: r.photo_reference
+              ? `${process.env.NEXT_PUBLIC_API_URL}/restaurants/${r.id}/photo?w=600`
+              : "",
+            isFavourite: true,
+            favoriteCount: r.favorite_count ?? 0,
+          }))
+        );
       }
     } catch (error) {
       console.error('Failed to fetch favourites:', error);

@@ -1,244 +1,143 @@
-import React, { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
-import { Label } from "./ui/label";
+"use client";
+
+import React, { useState } from "react";
+import toast from "react-hot-toast";
+
+import { fetchWithAuth } from "@/lib/api";
+import { useAppContext } from "@/app/contexts/AppContext";
 import { Badge } from "./ui/badge";
-import { X, Plus } from "lucide-react";
-import { Restaurant } from "./RestaurantCard";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { PlacesAutocomplete, PlaceSelection } from "./PlacesAutocomplete";
+import { Textarea } from "./ui/textarea";
+import { X } from "lucide-react";
+
+import type { Restaurant } from "./RestaurantCard";
 
 interface AddRestaurantDialogProps {
-  onAddRestaurant: (restaurant: Omit<Restaurant, "id" | "rating" | "favoriteCount">) => void;
-  onEditRestaurant?: (restaurant: Omit<Restaurant, "rating" | "favoriteCount">) => void;
-  restaurantToEdit?: Restaurant | null;
+  onAddRestaurant: (restaurant: Restaurant) => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  // legacy props kept for back-compat; ignored in the Places flow
+  onEditRestaurant?: unknown;
+  restaurantToEdit?: unknown;
 }
 
-export function AddRestaurantDialog({ 
-  onAddRestaurant, 
-  onEditRestaurant, 
-  restaurantToEdit = null, 
-  open, 
-  onOpenChange 
+export function AddRestaurantDialog({
+  onAddRestaurant,
+  open,
+  onOpenChange,
 }: AddRestaurantDialogProps) {
-  
-  // Always use controlled mode - provide defaults if not passed
+  const { selectedCity } = useAppContext();
   const isControlled = open !== undefined && onOpenChange !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
-  
-  const isOpen = isControlled ? open : internalOpen;
-  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
-  
-  const isEditMode = restaurantToEdit !== null;
+  const isOpen = isControlled ? open! : internalOpen;
+  const setIsOpen = isControlled ? onOpenChange! : setInternalOpen;
 
-  const [formData, setFormData] = useState({
-    name: "",
-    cuisine: "",
-    description: "",
-    tags: [] as string[],
-    image: ""
-  });
+  const [picked, setPicked] = useState<PlaceSelection | null>(null);
+  const [description, setDescription] = useState("");
+  const [cuisine, setCuisine] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [currentTag, setCurrentTag] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  // Reset form data when restaurant changes or dialog opens
-  useEffect(() => {
-    if (restaurantToEdit) {
-      setFormData({
-        name: restaurantToEdit.name,
-        cuisine: restaurantToEdit.cuisine,
-        description: restaurantToEdit.description,
-        tags: restaurantToEdit.tags,
-        image: restaurantToEdit.image || ""
-      });
-    } else {
-      setFormData({
-        name: "",
-        cuisine: "",
-        description: "",
-        tags: [],
-        image: ""
-      });
-    }
-  }, [restaurantToEdit, isOpen]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.name && formData.cuisine) {
-      if (isEditMode && onEditRestaurant) {
-        // For edit mode, include the id from the restaurant being edited
-        onEditRestaurant({
-          id: restaurantToEdit!.id,
-          ...formData
-        });
-      } else {
-        // For add mode, just pass the form data (no id needed)
-        onAddRestaurant(formData);
-      }
-      
-      setFormData({
-        name: "",
-        cuisine: "",
-        description: "",
-        tags: [],
-        image: ""
-      });
-      setIsOpen(false);
-    }
-  };
-
-  const addTag = () => {
-    if (currentTag && !formData.tags.includes(currentTag)) {
-      setFormData(prev => ({ ...prev, tags: [...prev.tags, currentTag] }));
-      setCurrentTag("");
-    }
-  };
-
-  const removeTag = (tag: string) => {
-    setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
-  };
-
-  // Render trigger button only when not controlled (uncontrolled mode)
-  if (isControlled) {
-    // Controlled mode - only render dialog content, no trigger
-    return (
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{isEditMode ? "Edit Restaurant" : "Add New Restaurant"}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="restaurant-name">Restaurant Name *</Label>
-              <Input
-                  id="restaurant-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))}
-                  required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="cuisine">Cuisine Type *</Label>
-              <Input
-                  id="cuisine"
-                  value={formData.cuisine}
-                  onChange={(e) => setFormData(prev => ({...prev, cuisine: e.target.value}))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                    }
-                  }}
-                  required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Tell us about this restaurant..."
-              />
-            </div>
-            
-            <div>
-              <Label>Tags</Label>
-              <div className="flex space-x-2 mb-2">
-                <Input
-                  placeholder="Add tag"
-                  value={currentTag}
-                  onChange={(e) => setCurrentTag(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                />
-                <Button type="button" onClick={addTag} size="sm">Add</Button>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {formData.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1">
-                    {tag}
-                    <X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="image">Image URL</Label>
-              <Input
-                id="image"
-                value={formData.image}
-                onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                placeholder="Optional - will use default if empty"
-              />
-            </div>
-            
-            <div className="flex justify-end space-x-2">
-              <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">{isEditMode ? "Save Changes" : "Add Restaurant"}</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    );
+  function reset() {
+    setPicked(null);
+    setDescription("");
+    setCuisine("");
+    setTags([]);
+    setCurrentTag("");
   }
 
-  // Uncontrolled mode - render with trigger button
+  function addTag() {
+    const t = currentTag.trim();
+    if (t && !tags.includes(t)) setTags([...tags, t]);
+    setCurrentTag("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!picked) {
+      toast.error("Pick a restaurant from the search results");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/restaurants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          place_id: picked.placeId,
+          session_token: picked.sessionToken,
+          description: description || null,
+          cuisine: cuisine || null,
+          tags,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const created = await res.json();
+      const mapped: Restaurant = {
+        id: created.id,
+        name: created.name,
+        cuisine: created.cuisine ?? "",
+        description: created.description ?? created.formatted_address ?? "",
+        tags: created.tags ?? [],
+        image: created.photo_reference
+          ? `https://places.googleapis.com/v1/${created.photo_reference}/media?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&maxWidthPx=600`
+          : "",
+        favoriteCount: created.favorite_count ?? 0,
+      };
+      onAddRestaurant(mapped);
+      toast.success(`Added ${created.name}`);
+      reset();
+      setIsOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to add restaurant: ${err.message ?? err}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <button 
-          data-slot="button"
-          className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive hover:bg-primary/90 h-9 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Restaurant
-        </button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={(o) => { setIsOpen(o); if (!o) reset(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? "Edit Restaurant" : "Add New Restaurant"}</DialogTitle>
+          <DialogTitle>Add Restaurant</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="restaurant-name">Restaurant Name *</Label>
+            <Label>Search Google Maps *</Label>
+            <PlacesAutocomplete onSelect={setPicked} cityBias={selectedCity || undefined} />
+            {picked && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                <span className="font-medium">{picked.name}</span> — {picked.formattedAddress}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="cuisine">Cuisine (optional)</Label>
             <Input
-                id="restaurant-name"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))}
-                required
+              id="cuisine"
+              value={cuisine}
+              onChange={(e) => setCuisine(e.target.value)}
+              placeholder="e.g. Italian, Thai…"
             />
           </div>
 
           <div>
-            <Label htmlFor="cuisine">Cuisine Type *</Label>
-            <Input
-                id="cuisine"
-                value={formData.cuisine}
-                onChange={(e) => setFormData(prev => ({...prev, cuisine: e.target.value}))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                  }
-                }}
-                required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Why do you recommend it?</Label>
             <Textarea
               id="description"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Tell us about this restaurant..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional note for other users"
             />
           </div>
-          
+
           <div>
             <Label>Tags</Label>
             <div className="flex space-x-2 mb-2">
@@ -246,35 +145,32 @@ export function AddRestaurantDialog({
                 placeholder="Add tag"
                 value={currentTag}
                 onChange={(e) => setCurrentTag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
               />
               <Button type="button" onClick={addTag} size="sm">Add</Button>
             </div>
             <div className="flex flex-wrap gap-1">
-              {formData.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="gap-1">
+              {tags.map((tag) => (
+                <Badge key={tag} variant="secondary" className="flex items-center gap-1">
                   {tag}
-                  <X className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
+                  <button type="button" onClick={() => setTags(tags.filter((t) => t !== tag))}>
+                    <X className="h-3 w-3" />
+                  </button>
                 </Badge>
               ))}
             </div>
           </div>
-          
-          <div>
-            <Label htmlFor="image">Image URL</Label>
-            <Input
-              id="image"
-              value={formData.image}
-              onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
-              placeholder="Optional - will use default if empty"
-            />
-          </div>
-          
-          <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
-              Cancel
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={!picked || submitting}>
+              {submitting ? "Adding…" : "Add"}
             </Button>
-            <Button type="submit">{isEditMode ? "Save Changes" : "Add Restaurant"}</Button>
           </div>
         </form>
       </DialogContent>

@@ -59,7 +59,7 @@ export default function ActionMenu({ onEdit, onDelete }: ActionMenuProps) {
             Edit
           </button>
 
-          {session.roles?.includes('ADMIN') &&
+          {session.roles?.includes('ROLE_ADMIN') &&
             <button
               onClick={handleDelete}
               className="block w-full text-left px-4 py-1 text-red-600 hover:bg-red-100"

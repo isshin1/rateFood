@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "auto_consult": true,
+  "timeout": 60,
+  "model": "gemini-2.5-flash",
+  "max_context_length": 4000,
+  "rate_limit_delay": 2
+}

@@ -1,0 +1,54 @@
+{
+  "dishes": [
+    {
+      "id": "1",
+      "name": "Pizza Margherita",
+      "restaurant": "Pizza Place",
+      "description": "Classic pizza with tomato, mozzarella, and basil.",
+      "tags": ["Italian", "Pizza", "Vegetarian"],
+      "image": "https://source.unsplash.com/random/800x600?pizza",
+      "isFavourite": false
+    },
+    {
+      "id": "2",
+      "name": "Sushi Platter",
+      "restaurant": "Sushi World",
+      "description": "A selection of fresh sushi and sashimi.",
+      "tags": ["Japanese", "Sushi", "Seafood"],
+      "image": "https://source.unsplash.com/random/800x600?sushi",
+      "isFavourite": true
+    }
+  ],
+  "restaurants": [
+    {
+      "id": "1",
+      "name": "Pizza Place",
+      "cuisine": "Italian",
+      "description": "Authentic Italian pizza.",
+      "rating": 4.5,
+      "tags": ["Italian", "Pizza", "Family Friendly"],
+      "image": "https://source.unsplash.com/random/800x600?restaurant",
+      "isFavourite": false
+    },
+    {
+      "id": "2",
+      "name": "Sushi World",
+      "cuisine": "Japanese",
+      "description": "The best sushi in town.",
+      "rating": 4.8,
+      "tags": ["Japanese", "Sushi", "Authentic"],
+      "image": "https://source.unsplash.com/random/800x600?sushi-restaurant",
+      "isFavourite": true
+    }
+  ],
+  "user": {
+    "submissions": {
+      "dishes": [],
+      "restaurants": []
+    },
+    "favourites": {
+      "dishes": ["2"],
+      "restaurants": ["2"]
+    }
+  }
+}

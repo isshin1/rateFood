@@ -39,3 +39,10 @@ node_modules
 *.idea
 *meta*
 minio_data
+logs/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.env

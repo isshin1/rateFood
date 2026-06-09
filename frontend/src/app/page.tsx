@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 import { FilterPanel } from "./components/FilterPanel";
 import { DishCard, Dish } from "./components/DishCard";
@@ -12,6 +13,9 @@ import { Plus } from "lucide-react";
 import { useAppContext } from "./contexts/AppContext";
 import { useSession, SessionContextType } from ".//contexts/SessionContext";
 import { OnboardingPopup } from "./components/OnboardingPopup";
+import { RadialMapView } from "./components/RadialMapView";
+import { useGeolocation } from "./hooks/useGeolocation";
+import { Map as MapIcon, List as ListIcon } from "lucide-react";
 
 export default function App() {
   const {
@@ -36,6 +40,9 @@ export default function App() {
     setHasMoreDishes,
     hasMoreRestaurants,
     setHasMoreRestaurants,
+    favouriteRestaurants,
+    fetchFavourites,
+    removeFavouriteRestaurant,
   } = useAppContext();
 
   const [hasMounted, setHasMounted] = useState(false);
@@ -52,6 +59,18 @@ export default function App() {
   const { session }: SessionContextType = useSession();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [previousSessionState, setPreviousSessionState] = useState<string | null>(null);
+
+  // Map view toggle (restaurants tab only)
+  const [restaurantViewMode, setRestaurantViewMode] = useState<"list" | "map">("list");
+  const [mapRadiusKm, setMapRadiusKm] = useState(8);
+  const geo = useGeolocation(false);
+
+  const handleOpenMapView = () => {
+    setRestaurantViewMode("map");
+    if (geo.status === "idle" || geo.status === "denied" || geo.status === "error") {
+      geo.request();
+    }
+  };
 
   // Initialize app and handle onboarding
   useEffect(() => {
@@ -98,6 +117,13 @@ export default function App() {
     setHasMoreRestaurants(true);
   }, [selectedCity, setRestaurants, setRestaurantsCurrentPage, setHasMoreRestaurants]);
 
+  // Refresh favourites when city or login state changes
+  useEffect(() => {
+    if (selectedCity && session?.token) {
+      fetchFavourites();
+    }
+  }, [selectedCity, session?.token, fetchFavourites]);
+
   // Reset dishes when city changes
   useEffect(() => {
     setDishes([]);
@@ -105,46 +131,73 @@ export default function App() {
     setHasMoreDishes(false);
   }, [selectedCity, setDishes, setDishesCurrentPage, setHasMoreDishes]);
 
+  // Reset restaurant pagination when search query changes (debounced so we don't
+  // refetch on every keystroke). When q is non-empty and locally we have nothing,
+  // the backend will live-search Google and ingest matches on demand.
+  useEffect(() => {
+    const t = setTimeout(() => setRestaurantsCurrentPage(0), 400);
+    return () => clearTimeout(t);
+  }, [restaurantSearch, setRestaurantsCurrentPage]);
+
   // Fetch restaurants
   useEffect(() => {
     if (!selectedCity) return;
     setLoadingRestaurants(true);
 
-    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/foodapp/restaurant/${selectedCity}?page=${restaurantsCurrentPage}`)
+    const qParam = restaurantSearch.trim()
+      ? `&q=${encodeURIComponent(restaurantSearch.trim())}`
+      : "";
+    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/restaurants?city=${encodeURIComponent(selectedCity)}${qParam}&page=${restaurantsCurrentPage}&size=20`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch restaurants for ${selectedCity}?page=${restaurantsCurrentPage}`);
         return res.json();
       })
-    .then(data => {
-      setRestaurants(prev => {
-        const newRestaurants = restaurantsCurrentPage === 0 ? data.data : [...prev, ...data.data];
-        return newRestaurants;
-      });
-        setHasMoreRestaurants(restaurantsCurrentPage + 1 < data.totalPages);
+      .then((data: { items: any[]; total: number; page: number; size: number }) => {
+        const mapped = data.items.map((r) => ({
+          id: r.id,
+          name: r.name,
+          cuisine: r.cuisine ?? "",
+          description: r.description ?? r.formatted_address ?? "",
+          tags: r.tags ?? [],
+          image: r.photo_reference
+            ? `${process.env.NEXT_PUBLIC_API_URL}/restaurants/${r.id}/photo?w=600`
+            : "",
+          isFavourite: r.is_favourite ?? false,
+          favoriteCount: r.favorite_count ?? 0,
+        }));
+        setRestaurants((prev) => (restaurantsCurrentPage === 0 ? mapped : [...prev, ...mapped]));
+        setHasMoreRestaurants((restaurantsCurrentPage + 1) * data.size < data.total);
       })
-
-      .catch(err => console.error(err))
+      .catch((err) => console.error(err))
       .finally(() => setLoadingRestaurants(false));
-  }, [selectedCity, restaurantsCurrentPage, setRestaurants, setLoadingRestaurants, setHasMoreRestaurants]);
+  }, [selectedCity, restaurantSearch, restaurantsCurrentPage, setRestaurants, setLoadingRestaurants, setHasMoreRestaurants]);
 
   // Fetch dishes
   useEffect(() => {
     if (!selectedCity) return;
     setLoadingDishes(true);
 
-    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/foodapp/dish/${selectedCity}?page=${dishesCurrentPage}`)
+    fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/dishes?city=${encodeURIComponent(selectedCity)}&page=${dishesCurrentPage}&size=20`)
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to fetch dishes for ${selectedCity}?page=${dishesCurrentPage}`);
         return res.json();
       })
-      .then(data => {
-        setDishes(prev => {
-          const newDishes = dishesCurrentPage === 0 ? data.data : [...prev, ...data.data];
-          return newDishes;
-        });
-        setHasMoreDishes(dishesCurrentPage + 1 < data.totalPages);
+      .then((data: { items: any[]; total: number; page: number; size: number }) => {
+        const mapped = data.items.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          restaurant: d.restaurant_name ?? "",
+          restaurantId: d.restaurant_id,
+          description: d.description ?? "",
+          tags: d.tags ?? [],
+          image: `${process.env.NEXT_PUBLIC_API_URL}/dishes/${d.id}/image?w=400`,
+          isFavourite: d.is_favourite ?? false,
+          favoriteCount: d.favorite_count ?? 0,
+        }));
+        setDishes((prev) => (dishesCurrentPage === 0 ? mapped : [...prev, ...mapped]));
+        setHasMoreDishes((dishesCurrentPage + 1) * data.size < data.total);
       })
-      .catch(err => console.error(err))
+      .catch((err) => console.error(err))
       .finally(() => setLoadingDishes(false));
   }, [selectedCity, dishesCurrentPage, setDishes, setLoadingDishes, setHasMoreDishes]);
 
@@ -195,13 +248,12 @@ export default function App() {
   }, [dishes, dishSearch, dishTags]);
 
   const filteredRestaurants = useMemo(() => {
+    // Name/q is resolved by the backend (so Google fallback works); only tag filter is client-side.
     return restaurants.filter(restaurant => {
-      const matchesSearch = restaurant.name.toLowerCase().includes(restaurantSearch.toLowerCase()) ||
-                           restaurant.cuisine.toLowerCase().includes(restaurantSearch.toLowerCase());
       const matchesTags = restaurantTags.length === 0 || restaurantTags.some(tag => restaurant.tags.includes(tag));
-      return matchesSearch && matchesTags;
+      return matchesTags;
     });
-  }, [restaurants, restaurantSearch, restaurantTags]);
+  }, [restaurants, restaurantTags]);
 
   const handleRestaurantRating = (restaurantId: string, rating: number) => {
     const updatedRestaurants = restaurants.map(restaurant =>
@@ -292,7 +344,7 @@ function AddRestaurantDialogFloatingTrigger({ onAddRestaurant }: { onAddRestaura
                       dish={dish}
                       onRemove={() => handleRemoveDish(dish.id)}
                       onFavouriteRemove={() => {} }
-                      showMenu={session.token ? true: false}
+                      showMenu={session.roles?.includes("ROLE_ADMIN") ?? false}
                       selectedCity={selectedCity}
                     />
                   ))}
@@ -322,28 +374,127 @@ function AddRestaurantDialogFloatingTrigger({ onAddRestaurant }: { onAddRestaura
                 />
               </div>
               <div className="lg:col-span-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-                  {filteredRestaurants.map(restaurant => (
-                    <RestaurantCard
-                      key={restaurant.id}
-                      restaurant={restaurant}
-                      // onRatingChange={handleRestaurantRating}
-                      onRemove={() => handleRemoveRestaurant(restaurant.id)}
-                      onFavouriteRemove={() => {} }
-                      showMenu={session.token ? true: false}
-                      selectedCity={selectedCity}
-                    />
-                  ))}
+                <div className="flex items-center justify-end mb-3 gap-2">
+                  <button
+                    onClick={() => setRestaurantViewMode("list")}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border ${restaurantViewMode === "list" ? "bg-orange-500 text-white border-orange-500" : "bg-white hover:bg-gray-50"}`}
+                  >
+                    <ListIcon size={14} /> List
+                  </button>
+                  <button
+                    onClick={handleOpenMapView}
+                    className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md border ${restaurantViewMode === "map" ? "bg-orange-500 text-white border-orange-500" : "bg-white hover:bg-gray-50"}`}
+                  >
+                    <MapIcon size={14} /> Map
+                  </button>
                 </div>
-                {filteredRestaurants.length === 0 && !loadingRestaurants && (
-                  <div className="text-center py-12">
-                    <p className="text-muted-foreground">No restaurants found matching your criteria.</p>
-                  </div>
+
+                {restaurantViewMode === "map" && typeof document !== "undefined" && createPortal(
+                  <div className="fixed inset-0 z-[60] bg-white overflow-auto p-4 sm:p-6">
+                    {geo.status === "prompting" && (
+                      <div className="text-center py-12 text-sm text-muted-foreground">
+                        Waiting for location permission…
+                      </div>
+                    )}
+                    {(geo.status === "denied" || geo.status === "unavailable" || geo.status === "error") && (
+                      <div className="text-center py-10 bg-white rounded-lg border">
+                        <p className="text-sm text-gray-700 mb-3">
+                          {geo.status === "denied"
+                            ? "Location permission was denied. Enable it in your browser settings to use the map view."
+                            : geo.status === "unavailable"
+                              ? "Your browser doesn't support geolocation."
+                              : `Couldn't get your location: ${geo.error ?? "unknown error"}`}
+                        </p>
+                        <button
+                          onClick={geo.request}
+                          className="px-4 py-2 rounded-md bg-orange-500 text-white text-sm hover:bg-orange-600"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    )}
+                    {geo.status === "granted" && geo.coords && (
+                      <>
+                        <div className="flex items-center justify-end gap-3 mb-3 text-sm">
+                          <label htmlFor="map-radius" className="text-muted-foreground">Radius</label>
+                          <input
+                            id="map-radius"
+                            type="range"
+                            min={1}
+                            max={30}
+                            step={1}
+                            value={mapRadiusKm}
+                            onChange={(e) => setMapRadiusKm(Number(e.target.value))}
+                            className="w-48 accent-orange-500"
+                          />
+                          <span className="font-medium text-gray-800 tabular-nums w-12 text-right">
+                            {mapRadiusKm} km
+                          </span>
+                        </div>
+                        <RadialMapView
+                          userLat={geo.coords.lat}
+                          userLng={geo.coords.lng}
+                          radiusKm={mapRadiusKm}
+                          onRadiusChange={setMapRadiusKm}
+                          onClose={() => setRestaurantViewMode("list")}
+                        />
+                      </>
+                    )}
+                  </div>,
+                  document.body
                 )}
-                {loadingRestaurants && (
-                  <div className="text-center py-12">
-                    <p className="text-muted-foreground">Loading restaurants...</p>
-                  </div>
+
+                {restaurantViewMode === "list" && session?.token && favouriteRestaurants.length > 0 && (
+                  <section className="mb-8">
+                    <h2 className="text-lg font-semibold mb-3">
+                      Your favourites in {selectedCity}
+                    </h2>
+                    <div
+                      className="flex space-x-4 overflow-x-auto scrollbar-hide pb-2"
+                      style={{ WebkitOverflowScrolling: "touch" }}
+                    >
+                      {favouriteRestaurants.map((r) => (
+                        <div key={r.id} className="flex-shrink-0 w-56">
+                          <RestaurantCard
+                            restaurant={r}
+                            onRemove={() => handleRemoveRestaurant(r.id)}
+                            onFavouriteRemove={() => {
+                              removeFavouriteRestaurant(r.id);
+                              fetchFavourites();
+                            }}
+                            showMenu={false}
+                            selectedCity={selectedCity}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {restaurantViewMode === "list" && (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+                      {filteredRestaurants.map(restaurant => (
+                        <RestaurantCard
+                          key={restaurant.id}
+                          restaurant={restaurant}
+                          onRemove={() => handleRemoveRestaurant(restaurant.id)}
+                          onFavouriteRemove={() => fetchFavourites()}
+                          showMenu={session.roles?.includes("ROLE_ADMIN") ?? false}
+                          selectedCity={selectedCity}
+                        />
+                      ))}
+                    </div>
+                    {filteredRestaurants.length === 0 && !loadingRestaurants && (
+                      <div className="text-center py-12">
+                        <p className="text-muted-foreground">No restaurants found matching your criteria.</p>
+                      </div>
+                    )}
+                    {loadingRestaurants && (
+                      <div className="text-center py-12">
+                        <p className="text-muted-foreground">Loading restaurants...</p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

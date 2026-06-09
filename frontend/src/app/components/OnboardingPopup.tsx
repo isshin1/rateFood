@@ -12,7 +12,7 @@ interface OnboardingPopupProps {
 export function OnboardingPopup({ isOpen, onClose, onCitySelect }: OnboardingPopupProps) {
   const [selectedCity, setSelectedCity] = useState("");
   const [citySearch, setCitySearch] = useState("");
-  const [filteredCities, setFilteredCities] = useState<string[]>([]);
+  const [filteredCities, setFilteredCities] = useState<{ label: string; value: string }[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -30,15 +30,11 @@ export function OnboardingPopup({ isOpen, onClose, onCitySelect }: OnboardingPop
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
     debounceRef.current = setTimeout(() => {
-      fetchWithAuth(
-        `${process.env.NEXT_PUBLIC_API_URL}/foodapp/city?name=${encodeURIComponent(citySearch)}&page=0&size=${PAGE_SIZE}`
+      import("@/lib/google-maps").then(({ predictCities }) =>
+        predictCities(citySearch)
       )
-        .then(res => {
-          if (!res.ok) throw new Error("Failed to fetch cities");
-          return res.json();
-        })
-        .then(data => {
-          setFilteredCities(data.data || []);
+        .then((cities) => {
+          setFilteredCities(cities);
         })
         .catch(() => {
           setFilteredCities([]);
@@ -63,7 +59,7 @@ export function OnboardingPopup({ isOpen, onClose, onCitySelect }: OnboardingPop
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (filteredCities[highlightedIndex]) {
-        handleCitySelect(filteredCities[highlightedIndex]);
+        handleCitySelect(filteredCities[highlightedIndex].value);
       }
     } else if (e.key === "Escape") {
       setIsDropdownOpen(false);
@@ -111,20 +107,20 @@ export function OnboardingPopup({ isOpen, onClose, onCitySelect }: OnboardingPop
   const Row = ({ index, style }: ListChildComponentProps) => {
     const city = filteredCities[index];
     const isHighlighted = index === highlightedIndex;
-    
+
     return (
       <button
         style={style}
-        key={city}
-        onClick={() => handleCitySelect(city)}
+        key={city.label}
+        onClick={() => handleCitySelect(city.value)}
         onMouseEnter={() => setHighlightedIndex(index)}
         className={`px-4 py-3 text-left w-full cursor-pointer transition-all duration-150 ${
-          isHighlighted 
-            ? "bg-orange-50 text-orange-700 font-medium" 
+          isHighlighted
+            ? "bg-orange-50 text-orange-700 font-medium"
             : "hover:bg-gray-50 text-gray-700"
         }`}
       >
-        {city}
+        {city.label}
       </button>
     );
   };

@@ -1,0 +1,10 @@
+{
+  "/api/foodapp/restaurant/:city": "/restaurants",
+  "/api/foodapp/dish/:city": "/dishes",
+  "/api/foodapp/dish": "/dishes",
+  "/api/foodapp/restaurant": "/restaurants",
+  "/api/foodapp/user/submissions/dishes": "/user/submissions/dishes",
+  "/api/foodapp/user/submissions/restaurants": "/user/submissions/restaurants",
+  "/api/foodapp/user/favourites/dishes": "/user/favourites/dishes",
+  "/api/foodapp/user/favourites/restaurants": "/user/favourites/restaurants"
+}

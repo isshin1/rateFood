@@ -109,7 +109,7 @@ export function RestaurantCard({
       return;
     }
 
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/foodapp/restaurant/${restaurant.id}`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/restaurants/${restaurant.id}`;
 
     try {
       const response = await fetchWithAuth(url, {
@@ -199,12 +199,11 @@ export function RestaurantCard({
       return;
     }
 
-    const endpoint = isFavourite ? "unFavourite" : "favourite";
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/foodapp/restaurant/${endpoint}/${restaurant.id}`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/restaurants/${restaurant.id}/favorite`;
 
     try {
       const response = await fetchWithAuth(url, {
-        method: "POST",
+        method: isFavourite ? "DELETE" : "POST",
       });
 
       if (response.ok) {
@@ -220,6 +219,7 @@ export function RestaurantCard({
         } else {
           setIsFavourite(true);
           setFavoriteCount((prev) => prev + 1);
+          onFavouriteRemove();  // reused as a "favourites changed" hook — refreshes the strip
           toast.success(t => (
             <div onClick={() => toast.dismiss(t.id)} style={{ cursor: "pointer" }}>
               Restaurant Favourited successfully!
@@ -239,7 +239,7 @@ export function RestaurantCard({
     <>
       <Card className="overflow-hidden shadow hover:shadow-md transition-shadow gap-0">
         <CardHeader className="p-0">
-          <div className="relative w-full min-h-55">
+          <div className="relative w-full h-48">
             <ImageWithFallback
               src={restaurant.image}
               alt={restaurant.name}

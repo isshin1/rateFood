@@ -25,7 +25,7 @@ interface NavbarProps {
 
 export function Navbar({ selectedCity, onCityChange, selectedTab, onTabChange, onAddDish, onAddRestaurant  }: NavbarProps) {
     const [citySearch, setCitySearch] = useState("");
-    const [filteredCities, setFilteredCities] = useState<string[]>([]);
+    const [filteredCities, setFilteredCities] = useState<{ label: string; value: string }[]>([]);
     const [cityTotalPages, setCityTotalPages] = useState(1);
     const [highlightedIndex, setHighlightedIndex] = useState(0);
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -75,16 +75,12 @@ export function Navbar({ selectedCity, onCityChange, selectedTab, onTabChange, o
         if (!isCityModalOpen) return;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
-            fetchWithAuth(
-                `${process.env.NEXT_PUBLIC_API_URL}/foodapp/city?name=${encodeURIComponent(citySearch)}&page=0&size=${PAGE_SIZE}`
+            import("@/lib/google-maps").then(({ predictCities }) =>
+                predictCities(citySearch)
             )
-                .then(res => {
-                    if (!res.ok) throw new Error("Failed to fetch cities");
-                    return res.json();
-                })
-                .then(data => {
-                    setFilteredCities(data.data);
-                    setCityTotalPages(data.totalPages);
+                .then((cities) => {
+                    setFilteredCities(cities);
+                    setCityTotalPages(1);
                 })
                 .catch(() => {
                     setFilteredCities([]);
@@ -148,7 +144,7 @@ export function Navbar({ selectedCity, onCityChange, selectedTab, onTabChange, o
         } else if (e.key === "Enter") {
             e.preventDefault();
             if (filteredCities[highlightedIndex]) {
-                onCityChange(filteredCities[highlightedIndex]);
+                onCityChange(filteredCities[highlightedIndex].value);
                 setIsCityModalOpen(false);
                 setCitySearch("");
             }
@@ -176,18 +172,18 @@ export function Navbar({ selectedCity, onCityChange, selectedTab, onTabChange, o
         return (
             <button
                 style={style}
-                key={city}
+                key={city.label}
                 onClick={() => {
-                    onCityChange(city);
+                    onCityChange(city.value);
                     setIsCityModalOpen(false);
-                    setCitySearch(""); // Optionally clear search on selection
+                    setCitySearch("");
                 }}
                 onMouseEnter={() => setHighlightedIndex(index)}
                 className={`px-3 py-2 text-left w-full cursor-pointer ${
                     isHighlighted ? "bg-blue-100 rounded" : "hover:bg-gray-100"
                 }`}>
 
-                {city}
+                {city.label}
             </button>
         );
     }

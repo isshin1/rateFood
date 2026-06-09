@@ -25,8 +25,14 @@ interface AddDishDialogProps {
 interface RestaurantNameDropdownProps {
   selectedCity: string;
   restaurant: string;
-  setRestaurant: (name: string) => void;
+  setRestaurant: (name: string, id?: string) => void;
   onValidate: (isValid: boolean) => void;
+}
+
+interface RestaurantHit {
+  id: string;
+  name: string;
+  formatted_address?: string;
 }
 
 // Move component OUTSIDE of AddDishDialog
@@ -38,7 +44,7 @@ const RestaurantNameDropdown = React.memo(function RestaurantNameDropdown({
 }: RestaurantNameDropdownProps) {
   const [query, setQuery] = useState(restaurant);
   const prevRestaurantRef = useRef(restaurant);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<RestaurantHit[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
@@ -55,14 +61,14 @@ const RestaurantNameDropdown = React.memo(function RestaurantNameDropdown({
         onValidate(true);
         return;
       }
-      const exactMatch = suggestions.some(
-          (name) => name.toLowerCase() === query.trim().toLowerCase()
+      const exactMatch = suggestions.find(
+          (s) => s.name.toLowerCase() === query.trim().toLowerCase()
       );
-      console.log(query, suggestions, exactMatch)
 
       if (!exactMatch) {
-        setRestaurantError("Restaurant doesnt exist, please create it first.");
+        setRestaurantError("Pick a restaurant from the dropdown.");
       } else {
+        setRestaurant(exactMatch.name, exactMatch.id);
         setRestaurantError("");
         onValidate(true);
       }
@@ -92,19 +98,18 @@ const RestaurantNameDropdown = React.memo(function RestaurantNameDropdown({
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      // Hits the local catalogue first; if empty, the backend falls back to
+      // Google Places and ingests matches, so the dropdown gradually covers
+      // any restaurant the user types — not just ones already in the DB.
       fetchWithAuth(
-          `${process.env.NEXT_PUBLIC_API_URL}/foodapp/restaurant/${selectedCity}?name=${encodeURIComponent(
-              query
-          )}&page=0&size=10`
+          `${process.env.NEXT_PUBLIC_API_URL}/restaurants?city=${encodeURIComponent(
+              selectedCity
+          )}&q=${encodeURIComponent(query)}&page=0&size=10`
       )
           .then((res) => (res.ok ? res.json() : Promise.reject("Failed to fetch")))
           .then((data) => {
-            if (data && Array.isArray(data.data)) {
-              const names = data.data.map((restaurant: { name: string }) => restaurant.name);
-              setSuggestions(names);
-            } else {
-              setSuggestions([]);
-            }
+            const items: RestaurantHit[] = Array.isArray(data?.items) ? data.items : [];
+            setSuggestions(items);
           })
           .catch(() => setSuggestions([]));
     }, 300);
@@ -126,7 +131,7 @@ const RestaurantNameDropdown = React.memo(function RestaurantNameDropdown({
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
-        handleSelect(suggestions[highlightedIndex]);
+        handleSelect(suggestions[highlightedIndex].name, suggestions[highlightedIndex].id);
       }
     } else if (e.key === "Escape") {
       setShowDropdown(false);
@@ -142,9 +147,9 @@ const RestaurantNameDropdown = React.memo(function RestaurantNameDropdown({
     onValidate(false);
   };
 
-  const handleSelect = (restaurantName: string) => {
+  const handleSelect = (restaurantName: string, restaurantId: string) => {
     setQuery(restaurantName);
-    setRestaurant(restaurantName);
+    setRestaurant(restaurantName, restaurantId);
     setShowDropdown(false);
     setRestaurantError("");
     onValidate(true);
@@ -177,16 +182,19 @@ const RestaurantNameDropdown = React.memo(function RestaurantNameDropdown({
                     Start typing to search restaurants...
                   </li>
               ) : suggestions.length > 0 ? (
-                  suggestions.map((name, index) => (
+                  suggestions.map((s, index) => (
                       <li
-                          key={name}
+                          key={s.id}
                           className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${
                               index === highlightedIndex ? "bg-blue-100" : ""
                           }`}
-                          onMouseDown={() => handleSelect(name)}
+                          onMouseDown={() => handleSelect(s.name, s.id)}
                           onMouseEnter={() => setHighlightedIndex(index)}
                       >
-                        {name}
+                        <div>{s.name}</div>
+                        {s.formatted_address && (
+                          <div className="text-xs text-gray-500 truncate">{s.formatted_address}</div>
+                        )}
                       </li>
                   ))
               ) : (
@@ -214,9 +222,11 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
     id: "", // Add id field
     name: "",
     restaurant: "",
+    restaurantId: "",
     description: "",
     tags: [] as string[],
-    image: ""
+    image: "",
+    imageFile: undefined as File | undefined,
   });
   const [currentTag, setCurrentTag] = useState("");
 
@@ -240,9 +250,11 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
         id: "",
         name: "",
         restaurant: "",
+        restaurantId: "",
         description: "",
         tags: [],
-        image: ""
+        image: "",
+        imageFile: undefined,
       });
       setIsOpen(false);
     }
@@ -265,9 +277,11 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
         id: dishToEdit.id, // Include id for edit mode
         name: dishToEdit.name,
         restaurant: dishToEdit.restaurant,
+        restaurantId: "",
         description: dishToEdit.description,
         tags: dishToEdit.tags,
-        image: dishToEdit.image
+        image: dishToEdit.image,
+        imageFile: undefined,
       });
       setIsRestaurantValid(true);
     } else {
@@ -275,9 +289,11 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
         id: "", // Empty id for add mode
         name: "",
         restaurant: "",
+        restaurantId: "",
         description: "",
         tags: [],
-        image: ""
+        image: "",
+        imageFile: undefined,
       });
       setIsRestaurantValid(false);
     }
@@ -307,7 +323,13 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
               <RestaurantNameDropdown
                   selectedCity={selectedCity}
                   restaurant={formData.restaurant}
-                  setRestaurant={(restaurant: string) => setFormData(prev => ({ ...prev, restaurant }))}
+                  setRestaurant={(restaurant: string, restaurantId?: string) =>
+                    setFormData(prev => ({
+                      ...prev,
+                      restaurant,
+                      restaurantId: restaurantId ?? prev.restaurantId,
+                    }))
+                  }
                   onValidate={setIsRestaurantValid}
               />
             </div>
@@ -349,13 +371,23 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
             </div>
 
             <div>
-              <Label htmlFor="image">Image URL</Label>
+              <Label htmlFor="image-file">Photo</Label>
               <Input
-                  id="image"
-                  value={formData.image}
-                  onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                  placeholder="Optional - will use default if empty"
+                  id="image-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setFormData(prev => ({
+                      ...prev,
+                      imageFile: f ?? undefined,
+                      image: f ? f.name : "",
+                    }));
+                  }}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Optional — leave blank to use a stock photo.
+              </p>
             </div>
 
             <div className="flex justify-end space-x-2">
@@ -401,7 +433,13 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
               <RestaurantNameDropdown
                   selectedCity={selectedCity}
                   restaurant={formData.restaurant}
-                  setRestaurant={(restaurant: string) => setFormData(prev => ({ ...prev, restaurant }))}
+                  setRestaurant={(restaurant: string, restaurantId?: string) =>
+                    setFormData(prev => ({
+                      ...prev,
+                      restaurant,
+                      restaurantId: restaurantId ?? prev.restaurantId,
+                    }))
+                  }
                   onValidate={setIsRestaurantValid}
               />
             </div>
@@ -443,13 +481,23 @@ export function AddDishDialog({ onAddDish, onEditDish, open, onOpenChange, selec
             </div>
 
             <div>
-              <Label htmlFor="image">Image URL</Label>
+              <Label htmlFor="image-file">Photo</Label>
               <Input
-                  id="image"
-                  value={formData.image}
-                  onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                  placeholder="Optional - will use default if empty"
+                  id="image-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    setFormData(prev => ({
+                      ...prev,
+                      imageFile: f ?? undefined,
+                      image: f ? f.name : "",
+                    }));
+                  }}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Optional — leave blank to use a stock photo.
+              </p>
             </div>
 
             <div className="flex justify-end space-x-2">

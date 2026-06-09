@@ -14,9 +14,11 @@ export interface Dish {
   id: string;
   name: string;
   restaurant: string;
+  restaurantId?: string;
   description: string;
   tags: string[];
   image: string;
+  imageFile?: File;  // not persisted — used when uploading
   isFavourite?: boolean;
   favoriteCount: number
 }
@@ -112,7 +114,7 @@ export function DishCard({ dish, onRemove, onFavouriteRemove, onUpdate, selected
       return;
     }
 
-    const url = `${process.env.NEXT_PUBLIC_API_URL}/foodapp/dish/${dish.id}`;
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/dishes/${dish.id}`;
 
     try {
       const response = await fetchWithAuth(url, {
