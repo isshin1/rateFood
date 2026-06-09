@@ -4,7 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # In containers we inject env vars via docker-compose env_file (project root .env).
+    # Avoid coupling settings loading to a file path inside the image.
+    model_config = SettingsConfigDict(extra="ignore")
 
     port: int = 8081
 
